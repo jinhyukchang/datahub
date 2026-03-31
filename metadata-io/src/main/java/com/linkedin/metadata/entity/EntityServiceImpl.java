@@ -179,6 +179,7 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
   private final Integer ebeanMaxTransactionRetry;
   private final boolean enableBrowseV2;
   private final com.linkedin.metadata.utils.metrics.MetricUtils metricUtils;
+  private final boolean schemaVersionWritesEnabled;
 
   @Getter
   private final Map<Set<ThrottleType>, ThrottleEvent> throttleEvents = new ConcurrentHashMap<>();
@@ -246,6 +247,28 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
       final boolean enableBrowseV2,
       @javax.annotation.Nullable
           final com.linkedin.metadata.utils.metrics.MetricUtils metricUtils) {
+    this(
+        aspectDao,
+        producer,
+        alwaysEmitChangeLog,
+        cdcModeChangeLog,
+        preProcessHooks,
+        retry,
+        enableBrowseV2,
+        metricUtils,
+        false);
+  }
+
+  public EntityServiceImpl(
+      @Nonnull final AspectDao aspectDao,
+      @Nonnull final EventProducer producer,
+      final boolean alwaysEmitChangeLog,
+      final boolean cdcModeChangeLog,
+      final PreProcessHooks preProcessHooks,
+      @Nullable final Integer retry,
+      final boolean enableBrowseV2,
+      @javax.annotation.Nullable final com.linkedin.metadata.utils.metrics.MetricUtils metricUtils,
+      final boolean schemaVersionWritesEnabled) {
 
     this.aspectDao = aspectDao;
     this.producer = producer;
@@ -255,7 +278,13 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
     ebeanMaxTransactionRetry = retry != null ? retry : DEFAULT_MAX_TRANSACTION_RETRY;
     this.enableBrowseV2 = enableBrowseV2;
     this.metricUtils = metricUtils;
+    this.schemaVersionWritesEnabled = schemaVersionWritesEnabled;
     log.info("EntityService cdcModeChangeLog is {}", this.cdcModeChangeLog);
+  }
+
+  /** Pre-seeds the schemaVersionWritesEnabled flag so all direct build sites stay consistent. */
+  private ChangeItemImpl.ChangeItemImplBuilder changeItemBuilder() {
+    return ChangeItemImpl.builder().schemaVersionWritesEnabled(schemaVersionWritesEnabled);
   }
 
   /**
@@ -908,7 +937,7 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
         pairList.stream()
             .map(
                 pair ->
-                    ChangeItemImpl.builder()
+                    changeItemBuilder()
                         .urn(entityUrn)
                         .aspectName(pair.getKey())
                         .recordTemplate(pair.getValue())
@@ -1620,7 +1649,7 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
     AspectsBatchImpl aspectsBatch =
         AspectsBatchImpl.builder()
             .one(
-                ChangeItemImpl.builder()
+                changeItemBuilder()
                     .urn(urn)
                     .aspectName(aspectName)
                     .recordTemplate(newValue)
@@ -1724,7 +1753,7 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
                       item -> item.getAspectSpec() != null && item.getAspectSpec().isTimeseries())
                   .map(
                       item ->
-                          ChangeItemImpl.builder()
+                          changeItemBuilder()
                               .urn(item.getUrn())
                               .aspectName(item.getEntitySpec().getKeyAspectName())
                               .changeType(ChangeType.UPSERT)
@@ -2184,7 +2213,7 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
       if (createDefaultAspects) {
         List<MCPItem> keyAspect =
             List.of(
-                ChangeItemImpl.builder()
+                changeItemBuilder()
                     .urn(urn)
                     .aspectName(entitySpec.getKeyAspectName())
                     .changeType(ChangeType.UPSERT)
@@ -2650,7 +2679,7 @@ public class EntityServiceImpl implements EntityService<ChangeItemImpl> {
                 aspectRecordsToIngest.stream()
                     .map(
                         pair ->
-                            ChangeItemImpl.builder()
+                            changeItemBuilder()
                                 .urn(urn)
                                 .aspectName(pair.getKey())
                                 .recordTemplate(pair.getValue())

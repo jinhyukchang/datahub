@@ -84,6 +84,7 @@ public class ChangeItemImpl implements ChangeMCP {
   @Setter @Nullable private SystemAspect previousSystemAspect;
   @Setter private long nextAspectVersion;
   private final Map<String, String> headers;
+  private final boolean schemaVersionWritesEnabled;
 
   @Nonnull
   public MetadataChangeProposal getMetadataChangeProposal() {
@@ -127,6 +128,13 @@ public class ChangeItemImpl implements ChangeMCP {
   }
 
   public static class ChangeItemImplBuilder {
+
+    private boolean schemaVersionWritesEnabled = false;
+
+    public ChangeItemImplBuilder schemaVersionWritesEnabled(boolean val) {
+      this.schemaVersionWritesEnabled = val;
+      return this;
+    }
 
     // Ensure use of other builders
     private ChangeItemImpl build() {
@@ -182,19 +190,17 @@ public class ChangeItemImpl implements ChangeMCP {
       // uses this to detect and upgrade stale when needed during future upgrades.
       //
       // NOTE: Today the server only accepts writes at the current schema version — clients are
-      // expected
-      // supply the aspect data matching or compatible with the current version, setSchemaVersion()
-      // will
-      // set it to current schema version for this aspect because the server has no migration path
-      // for
-      // incoming writes yet.
+      // expected supply the aspect data matching or compatible with the current version,
+      // setSchemaVersion() will set it to current schema version for this aspect because the server
+      // has no migration path for incoming writes yet.
       // Future work: allow clients to declare the version they are writing (via
-      // SystemMetadata.schemaVersion)
-      // and run thewrite-path migration chain to bring the payload up to the current version before
-      // persisting.
-      this.systemMetadata =
-          SystemMetadataUtils.setSchemaVersion(
-              this.systemMetadata, this.aspectSpec.getSchemaVersion());
+      // SystemMetadata.schemaVersion) and run thewrite-path migration chain to bring the payload up
+      // to the current version before persisting.
+      if (this.schemaVersionWritesEnabled) {
+        this.systemMetadata =
+            SystemMetadataUtils.setSchemaVersion(
+                this.systemMetadata, this.aspectSpec.getSchemaVersion());
+      }
       this.systemMetadata = SystemMetadataUtils.setAspectModified(this.systemMetadata, auditStamp);
 
       return new ChangeItemImpl(
@@ -209,7 +215,8 @@ public class ChangeItemImpl implements ChangeMCP {
           this.aspectSpec,
           this.previousSystemAspect,
           this.nextAspectVersion,
-          this.headers);
+          this.headers,
+          this.schemaVersionWritesEnabled);
     }
 
     public ChangeItemImpl build(
